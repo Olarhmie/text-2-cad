@@ -1,3 +1,6 @@
+import trimesh
+from simple_mesh import generate_simple_mesh
+import gmsh
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import requests
 from PIL import Image, ImageDraw, ImageFont
@@ -6,11 +9,16 @@ from openscad_runner import RenderMode, OpenScadRunner
 from openai import OpenAI
 from dotenv import load_dotenv
 import re
-from llama_index import StorageContext, load_index_from_storage
+
+from llama_index.storage.storage_context import StorageContext
+from llama_index.indices.loading import load_index_from_storage
+
 import chromadb
 from llama_index.vector_stores import ChromaVectorStore
 from datetime import datetime
 import json
+import subprocess  #added this
+import uuid
 
 with open("../keys.json", "r") as f:
     keys = json.load(f)
@@ -77,9 +85,18 @@ def query(request, toggleRag):
 app = Flask(__name__)
 
 
+   
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
+
+#added this for the mesh visualization
+@app.route('/view_mesh/<filename>')
+def view_mesh(filename):
+    """Render an interactive 3D viewer for the mesh"""
+    return render_template('mesh_viewer.html', filename=filename)
 
 @app.route('/submit', methods=['POST'])
 def submit():
@@ -101,13 +118,68 @@ def submit():
     # save the scad file with the timestamp as the filename
     curr_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     scad_path = os.path.join("scad_scripts", curr_timestamp + ".scad")
+    stl_output_path = os.path.join("static", "stl", curr_timestamp + ".stl")
+    
+    
+    
 
     # save a scad file with the answer
     os.makedirs(os.path.dirname(scad_path), exist_ok=True)
     # ensure the static/images directory exists for output images
     os.makedirs(os.path.join("static", "images"), exist_ok=True)
+    # ensure the STL format output exist
+    os.makedirs(os.path.join("static", "stl"), exist_ok=True)
+    os.makedirs(os.path.join("static", "mesh"), exist_ok=True)
+    
+
+    
+
+    
+
+
     with open(scad_path, 'w') as f:
         f.write(answer)
+
+    
+
+  
+
+    try:
+        print("Generating STL...")
+        print("Command:", ["openscad", "-o", stl_output_path, scad_path])
+    
+        result = subprocess.run(
+        ["openscad", "-o", stl_output_path, scad_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True)
+    
+
+        print("STDOUT:", result.stdout.decode())
+        print("STDERR:", result.stderr.decode())
+        print("✅ STL file created at:", stl_output_path)
+    except subprocess.CalledProcessError as e:
+        print("❌ Error generating STL:", e)
+        print("STDERR:", e.stderr.decode())
+
+    #mesh generation 
+    print("Generating simplified mesh...")
+    msh_output_path = os.path.join("static", "mesh", curr_timestamp + ".ply")
+    mesh_path = generate_simple_mesh(stl_output_path, msh_output_path)
+
+    if not mesh_path or not os.path.exists(msh_output_path):
+        print("❌ Mesh generation failed")
+
+    
+   
+
+
+   
+            
+        
+    
+
+        
     # render the scad file
     # png
     osr = OpenScadRunner(scad_path, f"static/images/{curr_timestamp}.png", render_mode=RenderMode.preview, imgsize=(800,600))
@@ -124,7 +196,7 @@ def submit():
     
 
     if osr.good():
-        return jsonify({'image': f"{curr_timestamp}.png", 'filename': curr_timestamp})
+        return jsonify({'image': f"{curr_timestamp}.png", 'filename': curr_timestamp, 'stl': f"{curr_timestamp}.stl", 'msh': f"{curr_timestamp}.ply", 'view_url': f"/view_mesh/{curr_timestamp}"})
     else:
         # Fallback generic message; OpenScadRunner may not expose an error attribute
         return jsonify({'error': 'OpenSCAD rendering failed.'})
@@ -141,7 +213,23 @@ def download_file(filename):
 
 
 
+#route to download STL
+@app.route('/download_stl/<filename>', methods=['GET'])
+def download_stl(filename):
+    return send_from_directory('static/stl', filename + ".stl", as_attachment=True)
+
+@app.route('/download_mesh/<filename>', methods=['GET'])
+def download_mesh(filename):
+    """Serve the generated PLY mesh file"""
+    return send_from_directory(
+        'static/mesh',
+        f"{filename}.ply",
+        as_attachment=True,
+        mimetype='application/octet-stream'
+    )
+
+
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=False, threaded=True)
 

@@ -92,11 +92,17 @@
         <br>
         <br>
         <a id="downloadLink" href="" style="display: none; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; text-decoration: none;">Download SCAD file</a>
+        <!--I added this part-->
+        <a id="downloadMeshLink" href="" style="display: none; padding: 10px 20px; background-color: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; margin-left: 10px;">Download Mesh (PLY)</a>
+        <a id="viewMeshLink" href="" target="_blank" style="display: none; padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; margin-left: 10px;">View 3D Mesh</a>
     </div>
     <div id="imageArea">
         <p id="generatedText" style="display: none;">The following is a 2D preview of the generated model. Download the SCAD code and render it on OpenSCAD to get the 3D model.</p>
         <img src="" alt="Generated Image" id="generatedImage" style="display: none;">
     </div>
+
+    
+    
 
 
     <div id="loadingIndicator">Loading...</div>
@@ -113,7 +119,8 @@
                 $('#generatedText').hide();
                 $('#downloadLink').hide();
 
-                $.post('/submit', { text: text, toggleRag: toggleRag }, function(response) {
+                //commented this
+                /*$.post('/submit', { text: text, toggleRag: toggleRag }, function(response) {
                     var imageUrl = "{{ url_for('static', filename='images/') }}" + response.image;
                     $('#generatedImage').attr('src', imageUrl).show();
                     $('#downloadButton').show();
@@ -125,13 +132,42 @@
 
                     // Hide loading indicator
                     $('#loadingIndicator').hide(); 
+                });*/
+
+                //I added this
+                $.post('/submit', { text: text, toggleRag: toggleRag }, function(response) {
+                    // Existing image handling
+                    var imageUrl = "{{ url_for('static', filename='images/') }}" + response.image;
+                    $('#generatedImage').attr('src', imageUrl).show();
+                    $('#generatedText').show();
+    
+                    // SCAD download button
+                    $('#downloadLink').attr('href', `/download/${response.filename}`).show();
+    
+                    // NEW: Mesh handling (add these lines)
+                    if (response.mesh) {
+                    $('#downloadMeshLink')
+                        .attr('href', `/download_mesh/${response.filename}`)
+                        .show();
+                    $('#viewMeshLink')
+                        .attr('href', `/view_mesh/${response.filename}`)
+                        .show();
+                    } else {
+                        $('#downloadMeshLink').hide();
+                        $('#viewMeshLink').hide();
+                    }
+    
+                    $('#loadingIndicator').hide();
                 });
+
             });
 
             $('#resetButton').click(function() {
                 $('#inputText').val('');
                 $('#generatedImage').hide();
                 $('#downloadLink').hide();
+                $('#downloadMeshLink').hide();
+                $('#viewMeshLink').hide();
                 $('#loadingIndicator').hide();
                 $('#generatedText').hide();
                 $('#toggleRag').prop('checked', false);

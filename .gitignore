@@ -6,5 +6,6 @@ static/images/*.png
 static/images/*.gif
 
 .env
+keys.json
 
 .DS_Store
